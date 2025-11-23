@@ -101,7 +101,17 @@ explicit_allowed = [o.strip() for o in env_allowed.split(',') if o.strip()]
 local_regexes = [r"^https?://localhost(:\d+)?$", r"^https?://127\.0\.0\.1(:\d+)?$"]
 
 cors_origins = explicit_allowed + local_regexes
-CORS(app, supports_credentials=True, origins=cors_origins)
+
+CORS(app, 
+     resources={r"/*": {
+         "origins": cors_origins,
+         "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+         "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+         "expose_headers": ["Content-Type", "Authorization"],
+         "supports_credentials": True,
+         "max_age": 3600
+     }}
+)
 
 def origin_allowed(origin):
     """Return True if the provided origin string is allowed by explicit allowed
@@ -126,17 +136,17 @@ def add_cors_headers(response):
     This complements flask-cors and guards against cases where exception paths
     or other middleware may return responses without the proper headers.
     """
+    if response.headers.get("Access-Control-Allow-Origin"):
+        return response
+    
     try:
         origin = request.headers.get("Origin")
         if origin and origin_allowed(origin):
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
-        else:
-            fallback = explicit_allowed[0] if explicit_allowed else "http://localhost:10008"
-            response.headers.setdefault("Access-Control-Allow-Origin", fallback)
-            response.headers.setdefault("Access-Control-Allow-Credentials", "true")
-        response.headers.setdefault("Access-Control-Allow-Headers", "Content-Type,Authorization")
-        response.headers.setdefault("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-Requested-With,Accept"
+            response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+            response.headers["Access-Control-Expose-Headers"] = "Content-Type,Authorization"
     except Exception:
         pass
     return response
@@ -165,12 +175,16 @@ def handle_all_exceptions(e):
         if origin and origin_allowed(origin):
             resp.headers["Access-Control-Allow-Origin"] = origin
             resp.headers["Access-Control-Allow-Credentials"] = "true"
+            resp.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-Requested-With,Accept"
+            resp.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+            resp.headers["Access-Control-Expose-Headers"] = "Content-Type,Authorization"
         else:
             fallback = explicit_allowed[0] if explicit_allowed else "http://localhost:10008"
             resp.headers.setdefault("Access-Control-Allow-Origin", fallback)
             resp.headers.setdefault("Access-Control-Allow-Credentials", "true")
-        resp.headers.setdefault("Access-Control-Allow-Headers", "Content-Type,Authorization")
-        resp.headers.setdefault("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+            resp.headers.setdefault("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Requested-With,Accept")
+            resp.headers.setdefault("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+            resp.headers.setdefault("Access-Control-Expose-Headers", "Content-Type,Authorization")
         return resp
     except Exception:
         # If even the error handler fails, return a minimal JSON response
@@ -178,7 +192,7 @@ def handle_all_exceptions(e):
         out = make_response(json.dumps({"status": "error", "message": "Fatal error"}), 500)
         out.headers.setdefault("Access-Control-Allow-Origin", "http://localhost:10008")
         out.headers.setdefault("Access-Control-Allow-Credentials", "true")
-        out.headers.setdefault("Access-Control-Allow-Headers", "Content-Type,Authorization")
+        out.headers.setdefault("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Requested-With,Accept")
         out.headers.setdefault("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
         out.headers["Content-Type"] = "application/json"
         return out
@@ -186,7 +200,7 @@ def handle_all_exceptions(e):
 
 from flask_socketio import SocketIO
 import services.socketio_service as socketio_service
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+socketio = SocketIO(app, cors_allowed_origins=cors_origins, async_mode="threading")
 socketio_service.socketio = socketio
 socketio_service.register_socketio_handlers()
 
