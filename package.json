@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "bs58": "^6.0.0",
+    "node-fetch": "^2.7.0",
+    "resvault-sdk": "^1.0.3",
+    "tweetnacl": "^1.0.3"
+  }
+}

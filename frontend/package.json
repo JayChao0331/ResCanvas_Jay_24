@@ -1,0 +1,72 @@
+{
+  "name": "canvas-app",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {"d3": "^7.0.0",
+    "@emotion/react": "^11.13.5",
+    "@emotion/styled": "^11.13.5",
+    "@mui/icons-material": "^6.4.7",
+    "@mui/material": "^6.1.9",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "bs58": "^6.0.0",
+    "clipper-lib": "^6.4.2",
+    "react": "^17.0.0 || ^18.0.0",
+    "react-color": "^2.19.3",
+    "react-copy-to-clipboard": "^5.1.0",
+    "react-dom": "^17.0.0 || ^18.0.0",
+    "react-markdown": "^9.0.1",
+    "react-router-dom": "^7.0.2",
+    "react-scripts": "5.0.1",
+    "react-syntax-highlighter": "^15.6.1",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.0",
+    "resvault-sdk": "^1.0.3",
+    "socket.io-client": "^4.8.1",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "test:e2e": "./run-all-tests.sh",
+    "test:e2e:profile": "npx playwright test tests/e2e/profile.spec.js",
+    "test:e2e:collaboration": "npx playwright test tests/e2e/collaboration.spec.js",
+    "test:e2e:roomsettings": "npx playwright test tests/e2e/roomSettings.spec.js"
+  },
+  "jest": {
+    "transformIgnorePatterns": [
+      "node_modules/(?!(react-router|react-router-dom|@remix-run)/)"
+    ]
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "peerDependencies": {
+    "react": "^17.0.0 || ^18.0.0",
+    "react-dom": "^17.0.0 || ^18.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.1",
+    "playwright": "^1.36.0"
+  }
+}
