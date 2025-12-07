@@ -1390,7 +1390,6 @@ def get_canvas_data():
                 logger.exception("getCanvasData: direct Mongo room lookup failed")
 
         logger.info(f"[POST-FILTER] all_missing_data length before final room filter: {len(all_missing_data)} sample_ids: {[e.get('id') for e in all_missing_data[:5]]}")
-        # Decrypt pass to ensure that encrypted bundles inside returned entries get decrypted
         for entry in all_missing_data:
             try:
                 raw_val = entry.get("value")

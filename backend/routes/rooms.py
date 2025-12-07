@@ -739,8 +739,6 @@ def post_stroke(roomId):
     stroke["user"]   = claims["username"]
     stroke["ts"]     = int(time.time() * 1000)
     
-    # Ensure brush metadata is preserved in stroke object
-    # The stroke should already contain these fields from the frontend, but ensure they're not null
     if "brushType" not in stroke or stroke["brushType"] is None:
         stroke["brushType"] = "normal"
     
@@ -755,7 +753,6 @@ def post_stroke(roomId):
             "drawingType": stroke.get("drawingType", "stroke")
         }
     
-    # Also ensure these fields are in metadata for consistency
     if "brushType" in stroke and isinstance(stroke.get("metadata"), dict):
         stroke["metadata"]["brushType"] = stroke["brushType"]
     if "brushParams" in stroke and isinstance(stroke.get("metadata"), dict):
@@ -830,7 +827,6 @@ def post_stroke(roomId):
 
         rooms_coll.update_one({"_id": room["_id"]}, {"$set": {"updatedAt": datetime.utcnow()}})
 
-    # Cache stroke in Redis ensures strokes are available even before MongoDB sync completes
     try:
         stroke_cache_key = f"stroke:{roomId}:{stroke['id']}"
         stroke_cache_value = {

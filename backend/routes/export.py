@@ -437,11 +437,7 @@ def import_canvas(room_id):
                 }
                 redis_client.set(stroke_id, json.dumps(cache_entry))
                 
-                # Insert directly into MongoDB for immediate availability
-                # This ensures strokes appear right away without waiting for sync service
-                # Format must match what the sync service and GET endpoints expect
                 try:
-                    # Decrypt the value if it was encrypted (for MongoDB storage)
                     stroke_for_mongo = stroke_data.copy()
                     stroke_for_mongo["id"] = stroke_id
                     

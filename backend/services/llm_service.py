@@ -1204,30 +1204,10 @@ FEWSHOT_STYLE_ASSISTANT_JSON_3 = {
     ]
 }
 
-# Additional guidance for brushes/stamps/metadata:
-#
-# When producing vector strokes/objects, you MAY include an optional `metadata`
-# object on each returned object describing how the canvas renderer should
-# display the primitive using ResCanvas features. Allowed metadata fields:
-#
-# - "drawingType": "stroke" | "image" | "stamp"         (default: "stroke")
-# - "brushType": string (one of: "normal", "wacky", "drip", "scatter", "neon", "chalk", "spray")
-# - "brushParams": object (tool-specific parameters, e.g. { "scatterAmount": 0.3 })
-# - "stampData": object (for stamps/images: { imageDataUrl, x, y, width, height })
-#
-# If the model cannot produce a full vector restyling, it may return a single
-# image object with a data URL (drawingType: "image"). Prefer vector output
-# when possible. If you include `brushType` and `brushParams`, the frontend
-# will attempt to render strokes using the project's brush implementations.
-
-
 
 def _get_style_transfer_message(canvas_state: dict, style_prompt: str) -> list[dict]:
     canvas_json = json.dumps(canvas_state, ensure_ascii=False)
     user_msg = f"CanvasState:\n{canvas_json}\nStylePrompt:\n{style_prompt}"
-    # Include a few-shot example that demonstrates the expected JSON output
-    # with `metadata` describing brushType/brushParams so the model learns
-    # to emit renderer instructions (e.g., for Van Gogh → wacky/mixed brushes).
     return [
         {"role": "system", "content": STYLE_TRANSFER_SYSTEM},
         {"role": "user", "content": FEWSHOT_STYLE_USER_1},
@@ -1272,15 +1252,8 @@ def ollama_style_transfer(canvas_state: dict, style_prompt: str) -> dict:
 
 
 def _map_style_to_brush(style_prompt: str) -> tuple[str, dict]:
-    """
-    Heuristic mapping from short style prompts to a brushType and brushParams
-    that the frontend rendering code can use. This is lightweight and intended
-    to provide useful defaults when the LLM does not include `metadata`.
-
-    Returns: (brushType, brushParams)
-    """
+    """Map style prompts to brush types and parameters."""
     s = (style_prompt or "").lower()
-    # Default
     brush = "normal"
     params: dict = {}
 
@@ -1326,9 +1299,7 @@ def _map_style_to_brush(style_prompt: str) -> tuple[str, dict]:
 
 def _postprocess_style_objects(objects: list, style_prompt: str) -> list:
     """
-    Ensure objects include a `metadata` dict with `brushType`/`brushParams` or
-    `stampData` for images. This makes REST-style outputs from the LLM more
-    directly renderable by the frontend.
+    Ensure objects include metadata dict with brushType/brushParams or stampData.
     """
     if not isinstance(objects, list):
         return objects
@@ -1343,12 +1314,9 @@ def _postprocess_style_objects(objects: list, style_prompt: str) -> list:
             processed.append(obj)
             continue
 
-        # Remember if the model included metadata explicitly
         had_meta = "metadata" in obj
-
         meta = obj.get("metadata", {}) or {}
 
-        # If the model returned an image via imageDataUrl, normalize to stampData
         if obj.get("drawingType") == "image" or obj.get("imageDataUrl"):
             meta.setdefault("drawingType", "image")
             meta.setdefault("stampData", {
@@ -1359,7 +1327,6 @@ def _postprocess_style_objects(objects: list, style_prompt: str) -> list:
                 "height": obj.get("height"),
             })
         else:
-            # For vector strokes, ensure brushType and brushParams exist
             meta.setdefault("drawingType", "stroke")
             meta.setdefault("brushType", meta.get("brushType", default_brush))
             meta.setdefault("brushParams", meta.get("brushParams", default_params))
@@ -1367,20 +1334,15 @@ def _postprocess_style_objects(objects: list, style_prompt: str) -> list:
         obj["metadata"] = meta
         processed.append(obj)
 
-        # Consider explicit if the model provided metadata with a non-empty brushType
         if had_meta and isinstance(meta, dict) and meta.get("brushType"):
             had_explicit_metadata = True
 
-    # If the LLM did not provide explicit metadata and the target style is
-    # an impasto/oil-style (e.g., Van Gogh), add deterministic overlay
-    # impasto-like strokes to better represent the style beyond color changes.
     s = (style_prompt or "").lower()
     if ("van gogh" in s or "oil" in s or "impasto" in s) and not had_explicit_metadata:
         overlays = []
         for idx, obj in enumerate(processed):
             if not isinstance(obj, dict):
                 continue
-            # Only augment vector strokes/shapes (not images)
             if obj.get("metadata", {}).get("drawingType") == "image":
                 continue
 
@@ -1388,11 +1350,9 @@ def _postprocess_style_objects(objects: list, style_prompt: str) -> list:
             if bbox is None:
                 continue
 
-            # Create 1-2 overlay strokes per object to emulate impasto texture
             overlay_objs = _create_impasto_overlays(obj, bbox, default_params, idx)
             overlays.extend(overlay_objs)
 
-        # Append overlays to result
         processed.extend(overlays)
 
     return processed
@@ -1435,12 +1395,10 @@ def _bbox_from_path(pathData: dict) -> typing.Optional[dict]:
 
 def _create_impasto_overlays(obj: dict, bbox: dict, default_params: dict, idx: int) -> list:
     """
-    Create 1-2 deterministic overlay freehand stroke objects near the given
-    bbox to emulate impasto texture. Uses default_params as a base for brushParams.
+    Create overlay freehand strokes to emulate impasto texture.
     """
     overlays = []
 
-    # Basic overlay color: use mixColors first if present, else use object color
     color = obj.get("metadata", {}).get("brushParams", {}).get("mixColors", [])
     if color and isinstance(color, list):
         overlay_color = color[0]
@@ -1452,10 +1410,8 @@ def _create_impasto_overlays(obj: dict, bbox: dict, default_params: dict, idx: i
     cx = (bbox["min_x"] + bbox["max_x"]) / 2
     cy = (bbox["min_y"] + bbox["max_y"]) / 2
 
-    # Deterministic offsets based on index so overlays vary per object
     offs = ((idx % 3) - 1) * 4
 
-    # Create two strokes: a short curved stroke and a slightly longer one
     def make_stroke(rel_points, lw_mult):
         pts = []
         for rx, ry in rel_points:
@@ -1481,12 +1437,9 @@ def _create_impasto_overlays(obj: dict, bbox: dict, default_params: dict, idx: i
 
 
 def style_transfer_canvas(canvas_state: dict, style_prompt: str) -> dict:
-    """
-    Try OpenAI first, then Ollama. Return dict with {"objects": [...]}
-    """
+    """Apply style transfer to canvas using OpenAI or Ollama."""
     model_output = openai_style_transfer(canvas_state, style_prompt)
     if isinstance(model_output, dict) and "error" not in model_output and "objects" in model_output:
-        # Post-process objects to ensure metadata for brushes/stamps is present
         model_output["objects"] = _postprocess_style_objects(model_output.get("objects", []), style_prompt)
         return model_output
 
@@ -1495,7 +1448,6 @@ def style_transfer_canvas(canvas_state: dict, style_prompt: str) -> dict:
         fallback_output["objects"] = _postprocess_style_objects(fallback_output.get("objects", []), style_prompt)
         return fallback_output
 
-    # If both failed, return original scene as a safe fallback
     original_objects = canvas_state.get("objects", [])
     return {"objects": original_objects}
 
@@ -1553,7 +1505,6 @@ CanvasObjects:
 
 FEWSHOT_RECO_ASSISTANT_2 = {"label": "tree", "confidence": 0.88, "explanation": "Brown trunk stroke plus clustered green freehand strokes resembling foliage."}
 
-# Additional few-shots to reduce confusion between cars/trees/houses/text
 FEWSHOT_RECO_USER_3 = '''
 SelectionBox:
 {"x":140,"y":120,"width":220,"height":120}
@@ -1582,7 +1533,6 @@ CanvasObjects:
 FEWSHOT_RECO_ASSISTANT_5 = {"label": "text: 'Hello'", "confidence": 0.98, "explanation": "A text primitive with the exact string 'Hello' present in the selection."}
 
 def _get_recognition_message(canvas_objects: list, box: dict, bounds: dict) -> list[dict]:
-    # Build a concise user message that includes the objects and bounding box
     objs_json = json.dumps({"objects": canvas_objects, "bounds": bounds}, ensure_ascii=False)
     user_msg = f"SelectionBox:\n{json.dumps(box)}\nCanvasObjects:\n{objs_json}\n\nPlease identify the primary object or scene contained within the selection box and return JSON as specified."
     return [
@@ -1626,13 +1576,8 @@ def ollama_recognize_objects(canvas_objects: list, box: dict, bounds: dict) -> d
 
 
 def _rule_based_recognize(canvas_objects: list, box: dict) -> typing.Optional[dict]:
-    """
-    Lightweight deterministic recognizer for very obvious cases.
-    Returns a recognition dict or None if no rule matched.
-    This helps avoid LLM mistakes for simple geometric cues.
-    """
+    """Lightweight rule-based recognizer for obvious geometric cases."""
     try:
-        # helpers
         def is_circle(obj):
             pd = obj.get("pathData", {})
             return pd.get("type") == "circle"
@@ -1644,26 +1589,21 @@ def _rule_based_recognize(canvas_objects: list, box: dict) -> typing.Optional[di
         def count_type(t):
             return sum(1 for o in canvas_objects if isinstance(o.get("pathData"), dict) and o.get("pathData", {}).get("type") == t)
 
-        # 1) Single circle -> circle
         circle_count = count_type("circle")
         if circle_count == 1 and len(canvas_objects) == 1:
             return {"label": "circle", "confidence": 0.95, "explanation": "Single circular shape primitive within selection."}
 
-        # 2) Text primitive
         for o in canvas_objects:
             if is_text(o):
                 txt = o.get("pathData", {}).get("text", "")
                 return {"label": f"text: '{txt}'", "confidence": 0.98, "explanation": "A text primitive with an explicit string was found."}
 
-        # 3) Car heuristic: body (rectangle/polygon) + at least two circles (wheels)
         rect_count = count_type("rectangle")
         poly_count = count_type("polygon")
         wheel_count = circle_count
         if (rect_count + poly_count) >= 1 and wheel_count >= 2:
             return {"label": "car", "confidence": 0.9, "explanation": "Rectangular/polygonal body plus multiple circular wheel primitives."}
 
-        # 4) House heuristic: rectangle base + triangular roof polygon
-        # detect polygon with 3 points (triangle) + rectangle
         def is_triangle(o):
             pd = o.get("pathData", {})
             pts = pd.get("points") if isinstance(pd.get("points"), list) else []
@@ -1673,7 +1613,6 @@ def _rule_based_recognize(canvas_objects: list, box: dict) -> typing.Optional[di
         if rect_count >= 1 and tri_count >= 1:
             return {"label": "house", "confidence": 0.9, "explanation": "Rectangular base plus triangular roof polygon detected."}
 
-        # 5) Tree heuristic: one brown-ish trunk stroke + clustered green freehand strokes
         def hex_to_rgb(h):
             try:
                 h = h.lstrip("#")
@@ -1686,8 +1625,8 @@ def _rule_based_recognize(canvas_objects: list, box: dict) -> typing.Optional[di
             tr, tg, tb = target_rgb
             return ((r-tr)**2 + (g-tg)**2 + (b-tb)**2) <= (tol**2)
 
-        brown_rgb = (139, 69, 19)  # #8B4513
-        green_rgb = (34, 139, 34)  # #228B22
+        brown_rgb = (139, 69, 19)
+        green_rgb = (34, 139, 34)
         trunk = any(o for o in canvas_objects if o.get("pathData", {}).get("tool") == "freehand" and color_close(o.get("color", "#000000"), brown_rgb, tol=120))
         foliage = any(o for o in canvas_objects if o.get("pathData", {}).get("tool") == "freehand" and color_close(o.get("color", "#000000"), green_rgb, tol=120))
         if trunk and foliage:
@@ -1700,17 +1639,12 @@ def _rule_based_recognize(canvas_objects: list, box: dict) -> typing.Optional[di
 
 
 def recognize_objects_in_box(canvas_objects: list, box: dict, bounds: dict) -> dict:
-    """
-    Lightweight recognition using OpenAI with Ollama fallback. Returns
-    { label, confidence, explanation } or an error payload.
-    """
-    # First try a fast rule-based recognizer to catch obvious geometric cues
+    """Lightweight recognition using OpenAI with Ollama fallback."""
     try:
         rule_out = _rule_based_recognize(canvas_objects, box)
         if isinstance(rule_out, dict):
             return rule_out
     except Exception:
-        # If rule-based fails for any reason, continue to LLM fallback
         pass
 
     model_output = openai_recognize_objects(canvas_objects, box, bounds)
