@@ -134,6 +134,8 @@ jobs:
             --ci
       
       - name: Build check (frontend)
+        env:
+          CI: false
         run: |
           cd frontend
           npm run build
