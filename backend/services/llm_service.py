@@ -319,7 +319,7 @@ def _get_text_to_drawings_initial_message(
 def openai_prompt_to_json(prompt: str, canvasState: dict[str, typing.Any]) -> dict:
     """
     Convert a natural-language drawing prompt into structured JSON
-    using the OpenAI GPT-4.1-mini model.
+    using the OpenAI GPT-4o-mini model.
 
     Args:
         prompt: The user's text prompt describing the drawing.
@@ -331,10 +331,13 @@ def openai_prompt_to_json(prompt: str, canvasState: dict[str, typing.Any]) -> di
         from config import OPENAI_API_KEY
         from openai import OpenAI
 
+        if not OPENAI_API_KEY:
+            return {"error": "openai_not_configured", "detail": "OPENAI_API_KEY is not set in environment"}
+
         client = OpenAI(api_key=OPENAI_API_KEY)
 
         resp = client.chat.completions.create(
-            model="gpt-4.1-mini",
+            model="gpt-4o-mini",
             response_format={"type": "json_object"},  # forces valid JSON
             temperature=0.1,
             messages=_get_text_to_drawings_initial_message(prompt, canvasState),

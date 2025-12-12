@@ -1,5 +1,3 @@
-<img width="389" height="91" alt="image" src="https://github.com/user-attachments/assets/24a5606a-988c-43ea-9eee-ab19ed6628be" />
-
 # About ResCanvas
 
 ## The Existing Problem
@@ -26,6 +24,17 @@ The key feature of ResCanvas is defined by having all drawings stored persistent
 * Server-side JWT authentication and authorization with robust backend middleware (`backend/middleware/auth.py`) that validates all tokens, enforces access controls, and prevents client-side bypasses
 * Backend enforces security with all the authentication, verification, and authorization logic running on the server (clients cannot manipulate or circumvent security checks)
 * Real time collaboration using Socket.IO for low latency stroke broadcasting, user notifications, and user activity communication with JWT-protected Socket.IO connections
+
+### AI Features and API Key
+ResCanvas includes optional AI-powered features for sketch generation, beautification, recognition, and style transfer. The backend reads the OpenAI API key from `OPENAI_API_KEY` via `backend/config.py`. If this key is not defined, AI endpoints will return an error and the UI will report failures.
+
+To enable AI features, set the environment variable before starting the backend (macOS/zsh example):
+
+```
+export OPENAI_API_KEY="sk-...your-key..."
+```
+
+Then restart the backend. You may alternatively load it through your process manager or `.env` so that `backend/config.py` picks it up at startup. The drawing model used is `gpt-4o-mini`; if OpenAI is unavailable, the service attempts an Ollama fallback (`llama3:8b`) when installed locally.
 
 ## Detailed Architecture and Concepts
 Our application consists of several major components. 
@@ -105,6 +114,64 @@ All protected routes and Socket.IO handlers use the following decorators:
 
 # ResCanvas Setup Guide
 ResCanvas is a decentralized collaborative drawing platform that integrates **ResilientDB**, **MongoDB**, and **Redis** for data consistency, caching, and persistence.  
+=======
+<p align="center">
+  <img width="389" height="91" alt="image" src="https://github.com/user-attachments/assets/24a5606a-988c-43ea-9eee-ab19ed6628be" />
+</p>
+
+_**<p align="center">Real-time creativity, backed by decentralized trust and resiliency.</p>**_
+**<p align="center">By Henry Chou and Chris Ruan</p>**
+
+# ResCanvas
+ResCanvas is a decentralized, real-time collaborative drawing platform built on top of ResilientDB. It provides a modern web-based canvas that supports multi-user drawing, room-based collaboration, secure access controls, and persistent on-chain storage of stroke data.
+
+Unlike traditional drawing tools that store artwork on centralized servers, ResCanvas records all drawing activity as immutable transactions in ResilientDB. This ensures verifiable history, censorship resistance, and transparent data integrity while preserving a responsive user experience.
+
+## Why ResCanvas
+Existing cloud drawing tools offer convenience, but rely entirely on centralized infrastructure. Data can be monitored, modified, or removed, and users have no direct control over how their work is stored or shared. Platforms such as Figma, Google Drawings, and Canva offer collaborative features, but they all depend on trust in a single service operator.
+
+ResCanvas addresses these limitations by combining a familiar drawing interface with decentralized storage. Strokes are committed to a fault-tolerant, verifiable transaction ledger, while Redis and MongoDB maintain fast caches for real-time and historical access. The platform supports both public and private rooms, authenticated collaboration, and optional cryptographic signatures for high-trust environments.
+
+## Key Features
+- Multi-user real-time drawing with immediate stroke broadcast.
+- Room-based collaboration system with access controls.
+  - Supports multiple collaboration models:
+    - **Public Rooms:** Open access with shared drawing history.
+    - **Private Rooms:** Access-limited rooms where strokes may be encrypted.
+    - **Secure Rooms:** Require client-side wallet signing (e.g., [ResVault](https://chromewebstore.google.com/detail/resvault/ejlihnefafcgfajaomeeogdhdhhajamf?pli=1)). Each stroke includes a verifiable signature.
+- Persistent storage through ResilientDB, ensuring an immutable edit history.
+- Redis caching for low-latency updates and undo/redo operations.
+- MongoDB warm cache synchronized with the ledger through the `resilient-python-cache` sync bridge service.
+- Secure server-side authentication and authorization using JWTs.
+  - Backend enforces all membership and permission checks.
+- Optional encrypted strokes and user-level cryptographic signing for secure rooms.
+- Responsive React frontend styled with Material Design principles.
+
+## Architecture Overview
+ResCanvas is composed of four main layers.
+
+### Frontend (React)
+The frontend implements the drawing tools, canvas rendering, session state, and real-time updates via Socket.IO. It performs local smoothing and batching of strokes and attaches JWT access tokens to authenticated requests. It does not enforce security logic; validation occurs in the backend.
+
+### Backend (Flask + Socket.IO)
+The backend forms the trust boundary of the application:
+
+- Validates JWT tokens and enforces room permissions.
+- Receives stroke submissions and commits them to ResilientDB using GraphQL.
+- Emits live updates through Socket.IO to all participants in a room.
+- Manages undo/redo stacks and caching of data in Redis.
+- Handles optional encryption and signature verification for private and secure rooms.
+
+### ResilientDB
+ResilientDB is the authoritative ledger. Every stroke is written as a transaction and included in a block after consensus. This provides ordering, immutability, and verifiable authorship for all drawing activity.
+
+### MongoDB & Redis Caching Layer
+A lightweight synchronization service (`resilient-python-cache`) listens to ResilientDB block streams, parses new transactions, and mirrors them into MongoDB. This provides a fast and queryable history view. Redis stores ephemeral state such as recent strokes and undo/redo queues.
+
+Because ResilientDB is append-only, certain operations, such as undo and redo actions, are represented as semantic overlays rather than destructive modifications. The backend records these actions into the Redis caching layer and, when required, writes reversible markers to the ledger. Clients then replay strokes based on the authoritative ordering in ResilientDB.
+
+# ResCanvas Setup Guide
+
 This guide provides complete instructions to deploy ResCanvas locally, including setup for the cache layer, backend, and frontend.
 
 ## Prerequisites
@@ -156,24 +223,12 @@ MONGO_URL = "[URI_COPIED_FROM_MONGODB_CONNECTION]"
 MONGO_DB = "canvasCache"
 MONGO_COLLECTION = "strokes"
 ```
-
-### Fix Missing Packages (Temporary)
-
-Run these if import errors occur:
-
-```bash
-pip install python-dotenv
-pip install --upgrade motor
-```
-
 ### Start the Cache Service
 
 ```bash
 python3 example.py
 ```
-
-> This starts a MongoDB caching service that syncs data with ResilientDB via the
-resilientdb://crow.resilientdb.com endpoint defined in `cache.py`.
+This starts a MongoDB caching service that syncs data with ResilientDB via the `resilientdb://crow.resilientdb.com` endpoint defined in `cache.py`.
 
 ## Step 3: Backend Setup (Second Terminal Window)
 
@@ -261,10 +316,7 @@ npm i -g npm
 npm install
 npm start
 ```
-
-> The app should now be running at http://localhost:3000
-
----
+The app should now be running at `http://localhost:[...]`
 
 # Important endpoints
 - Create/list rooms: POST/GET `/rooms`
@@ -281,8 +333,6 @@ npm start
 - **Current User**: `GET /auth/me` — Returns authenticated user's profile (requires valid access token).
 
 For secure rooms (type `secure`) strokes must be signed client-side; the backend validates signatures in `submit_room_line.py`.
-
----
 
 # API for External Applications
 ResCanvas provides a versioned REST API (`/api/v1/*`) for external applications to integrate collaborative drawing functionality. This generalized API layer allows developers to build third-party apps, mobile clients, integrations, and automation tools on top of ResCanvas.
@@ -318,7 +368,7 @@ All API v1 endpoints are prefixed with `/api/v1` as shown below.
 - `GET /api/v1/auth/me` — Get current user info
 - `POST /api/v1/auth/change-password` — Change password
 
-**Canvases** (`/api/v1/canvases/*`) - **RECOMMENDED**:
+**Canvases** (`/api/v1/canvases/*`):
 - `POST /api/v1/canvases` — Create new canvas
 - `GET /api/v1/canvases` — List accessible canvases
 - `GET /api/v1/canvases/{id}` — Get canvas details
@@ -411,10 +461,7 @@ curl -X DELETE http://localhost:10010/api/v1/canvases/$CANVAS_ID/strokes \
 ```
 
 ## Contributing to the API
-
 We welcome contributions! The API layer is designed to be extended with new endpoints. Please see `CONTRIBUTING.md` for guidelines before you start.
-
----
 
 # Key configuration (backend)
 See `backend/config.py` and set the following environment variables as appropriate (examples shown in the repository's `.env` usage):
@@ -426,8 +473,6 @@ See `backend/config.py` and set the following environment variables as appropria
 - `SIGNER_PUBLIC_KEY`, `SIGNER_PRIVATE_KEY`, `RECIPIENT_PUBLIC_KEY` — used when committing strokes via the GraphQL service
 
 The code loads environment variables via `python-dotenv` in `backend/config.py`.
-
----
 
 # Authentication examples (curl):
   - Login to obtain access token (also sets refresh cookie):
@@ -483,8 +528,6 @@ ResCanvas has a comprehensive test suite with tests that are covering both the b
 - **Environment variable names**: The backend expects `JWT_SECRET` (not `JWT_SECRET_KEY`) and `RES_DB_BASE_URI`/`RESILIENTDB_BASE_URI` for ResilientDB endpoint configuration.
 - **Codecov uploads**: If the repository is private, set a `CODECOV_TOKEN` secret in Settings → Secrets → Actions. The workflows skip Codecov upload if the token is not defined.
 - **Manual trigger**: Actions → CI - Full Test Suite → Run workflow
-
----
 
 # Contributors
 * Henry Chou - Team Leader and Full Stack Developer

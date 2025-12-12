@@ -4133,6 +4133,29 @@ function Canvas({
     };
   }
 
+  const extractAIErrorMessage = (payload) => {
+    if (!payload) return 'Unknown error';
+    if (typeof payload === 'string') return payload;
+
+    const candidate = payload.detail ?? payload.error ?? payload.message ?? payload;
+    if (typeof candidate === 'string') return candidate;
+
+    if (candidate && typeof candidate === 'object') {
+      if (candidate.detail) {
+        const nested = extractAIErrorMessage(candidate.detail);
+        if (nested) return nested;
+      }
+      if (candidate.message) return candidate.message;
+      try {
+        return JSON.stringify(candidate);
+      } catch (jsonError) {
+        console.error('Failed to stringify AI error payload:', jsonError);
+      }
+    }
+
+    return 'Unknown error';
+  };
+
   const handlePromptInputSubmition = async (prompt) => {
     try {
       if (aiGenerateService === 'drawing') {
@@ -4148,11 +4171,15 @@ function Canvas({
         const resp = await textToDrawing(prompt, canvasState);
         const payload = typeof resp === 'string' ? JSON.parse(resp) : resp;
 
-        if (payload && Array.isArray(payload.objects)) {
+        if (payload && payload.error) {
+          // Backend returned an error
+          const errorMsg = extractAIErrorMessage(payload);
+          showLocalSnack(`AI sketch generation failed: ${errorMsg}`);
+        } else if (payload && Array.isArray(payload.objects)) {
           await addAIGeneratedObjects(payload.objects);
           showLocalSnack("AI objects rendered to canvas.");
         } else {
-          showLocalSnack("An error occured while generating the sketch.");
+          showLocalSnack(`An error occurred while generating the sketch. Response: ${JSON.stringify(payload).substring(0, 100)}`);
         }
 
       } else if (aiGenerateService === 'image') {
@@ -4192,9 +4219,7 @@ function Canvas({
           await addAIGeneratedObjects(payload.objects);
           showLocalSnack('Style transfer applied to canvas.');
         } else {
-          const errMsg = payload && payload.error
-            ? (payload.error.detail || payload.error.message || String(payload.error))
-            : 'unknown error';
+          const errMsg = payload ? extractAIErrorMessage(payload) : 'unknown error';
           console.error('Style transfer failed, payload:', payload);
           showLocalSnack(`Style transfer failed: ${errMsg}`);
         }
