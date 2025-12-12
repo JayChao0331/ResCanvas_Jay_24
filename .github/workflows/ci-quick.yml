@@ -106,8 +106,6 @@ jobs:
             "RESILIENTDB_GRAPHQL_URI=https://cloud.resilientdb.com/graphql" \
             "JWT_SECRET=test-secret-key-do-not-use-in-production" > .env
       
-      - name: Run backend unit tests only (fast)
-        # wait for mongodb to be ready on localhost:27017
       - name: Wait for MongoDB
         run: |
           for i in {1..30}; do
